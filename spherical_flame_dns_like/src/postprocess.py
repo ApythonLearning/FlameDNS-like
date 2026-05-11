@@ -3,14 +3,16 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .chemistry import speed_calibration_from_h2
+
 
 def synthetic_markstein_number(config: dict, h2_volume_fraction: float) -> float:
     """Configured real scalar Markstein-number trend for Stage 1 histories."""
     model = config["time_history"].get("markstein_model", {})
     low_h2 = float(model.get("low_h2_volume_fraction", 0.06))
     high_h2 = float(model.get("high_h2_volume_fraction", 0.14))
-    low_ma = float(model.get("low_markstein_number", -0.2))
-    high_ma = float(model.get("high_markstein_number", 1.1))
+    low_ma = float(model.get("low_markstein_number", -0.55))
+    high_ma = float(model.get("high_markstein_number", -0.10))
     if high_h2 <= low_h2:
         raise ValueError("high_h2_volume_fraction must be larger than low_h2_volume_fraction")
     weight = (float(h2_volume_fraction) - low_h2) / (high_h2 - low_h2)
@@ -26,7 +28,13 @@ def synthetic_expanding_history(S_L_m_s: float, delta_f_m: float, config: dict, 
     R[0] = float(ignition_config["initial_radius_m"])
     Ma_true = synthetic_markstein_number(config, h2_volume_fraction)
     Lb_true = float(time_config.get("markstein_length_factor", 1.0)) * delta_f_m * Ma_true
-    Sb0_true = 1.15 * float(S_L_m_s)
+    calibration = speed_calibration_from_h2(h2_volume_fraction, config)
+    if calibration is None:
+        Sb0_true = 1.15 * float(S_L_m_s)
+        rho_b_over_rho_u = float(S_L_m_s / Sb0_true) if Sb0_true > 0.0 else np.nan
+    else:
+        Sb0_true = float(calibration["S_b0_unstretched_m_s"])
+        rho_b_over_rho_u = float(calibration["rho_b_over_rho_u"])
     for i in range(1, len(t)):
         dt = t[i] - t[i - 1]
         speed = Sb0_true / max(1.0 + 2.0 * Lb_true / max(R[i - 1], 1e-9), 0.2)
@@ -40,6 +48,8 @@ def synthetic_expanding_history(S_L_m_s: float, delta_f_m: float, config: dict, 
             "S_b_m_s": Sb,
             "kappa_1_s": kappa,
             "S_b0_model_m_s": Sb0_true,
+            "rho_b_over_rho_u_model": rho_b_over_rho_u,
+            "S_L_model_m_s": rho_b_over_rho_u * Sb0_true,
             "L_b_model_m": Lb_true,
             "Ma_model": Ma_true,
         }
@@ -61,7 +71,12 @@ def fit_markstein(history: pd.DataFrame, fit_config: dict) -> dict[str, float]:
     slope, intercept = np.polyfit(kappa, Sb, 1)
     L_b = -float(slope)
     S_b0 = float(intercept)
-    return {"S_b0_m_s": S_b0, "L_b_m": L_b, "fit_points": int(mask.sum())}
+    return {
+        "S_b0_m_s": S_b0,
+        "S_b_kappa_slope_m": float(slope),
+        "L_b_m": L_b,
+        "fit_points": int(mask.sum()),
+    }
 
 
 def add_dimensionless_groups(summary: dict[str, float]) -> dict[str, float]:

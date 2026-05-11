@@ -16,6 +16,8 @@ class Flame1DResult:
     T_burned_K: float
     used_cantera: bool
     status: str
+    rho_b_over_rho_u: float | None = None
+    S_b0_unstretched_m_s: float | None = None
 
 
 def h2_o2_mole_fraction(h2_volume_fraction: float) -> dict[str, float]:
@@ -28,6 +30,59 @@ def h2_o2_mole_fraction(h2_volume_fraction: float) -> dict[str, float]:
 def equivalence_ratio_h2_o2(h2_volume_fraction: float) -> float:
     # Stoichiometric H2/O2 mole ratio is 2.0.
     return float((h2_volume_fraction / (1.0 - h2_volume_fraction)) / 2.0)
+
+
+def reference_laminar_speed_h2_o2(phi: float, config: dict | None = None) -> float:
+    """Smooth reference S_L(phi) used only for fallback and sanity checks.
+
+    For H2/O2 mixtures the laminar speed increases on the lean branch and is
+    represented with a broad peak near phi ~= 1.1. This is not a substitute for
+    Cantera; it keeps non-converged very-lean cases on a physically ordered
+    scale instead of mixing arbitrary placeholder values with converged cases.
+    """
+    model_config = {}
+    if config is not None:
+        model_config = config.get("free_flame", {}).get("fallback_speed_model", {})
+    phi_peak = float(model_config.get("phi_peak", 1.10))
+    S_peak = float(model_config.get("S_peak_m_s", 12.0))
+    lean_width = float(model_config.get("lean_log_width", 0.72))
+    rich_width = float(model_config.get("rich_log_width", 1.10))
+    S_floor = float(model_config.get("S_floor_m_s", 1.0e-4))
+
+    phi_safe = max(float(phi), 1.0e-8)
+    width = lean_width if phi_safe <= phi_peak else rich_width
+    log_distance = np.log(phi_safe / phi_peak)
+    speed = S_peak * np.exp(-0.5 * (log_distance / width) ** 2)
+    return float(max(speed, S_floor))
+
+
+def speed_calibration_from_h2(h2_volume_fraction: float, config: dict) -> dict[str, float] | None:
+    """Return configured Stage 1 speed calibration, or ``None``.
+
+    The input table stores the plotted no-stretch intercept ``S_b0`` and the
+    density ratio ``rho_b/rho_u``. The laminar burning velocity is calculated as
+    ``S_L = (rho_b/rho_u) S_b0``.
+    """
+    model = config.get("free_flame", {}).get("speed_calibration", {})
+    if not bool(model.get("enabled", False)):
+        return None
+    h2_points = model.get("h2_volume_fraction_points", [])
+    sb0_points = model.get("S_b0_unstretched_m_s_points", [])
+    density_ratio_points = model.get("rho_b_over_rho_u_points", [])
+    if len(h2_points) != len(sb0_points) or len(h2_points) != len(density_ratio_points) or len(h2_points) < 2:
+        raise ValueError("speed_calibration requires matching h2, S_b0, and density-ratio point lists.")
+    h2 = np.asarray(h2_points, dtype=float)
+    sb0 = np.asarray(sb0_points, dtype=float)
+    density_ratio = np.asarray(density_ratio_points, dtype=float)
+    order = np.argsort(h2)
+    h2_value = float(h2_volume_fraction)
+    S_b0_value = float(np.interp(h2_value, h2[order], sb0[order]))
+    density_ratio_value = float(np.interp(h2_value, h2[order], density_ratio[order]))
+    return {
+        "rho_b_over_rho_u": density_ratio_value,
+        "S_b0_unstretched_m_s": S_b0_value,
+        "S_L_m_s": density_ratio_value * S_b0_value,
+    }
 
 
 def compute_free_flame(h2_volume_fraction: float, config: dict, output_dir: Path) -> Flame1DResult:
@@ -66,6 +121,7 @@ def compute_free_flame(h2_volume_fraction: float, config: dict, output_dir: Path
     except Exception as exc:
         result = _fallback_profile(h2_volume_fraction, config, f"Cantera failed: {exc}")
 
+    result = _apply_speed_calibration(result, h2_volume_fraction, config)
     result.profile.to_csv(output_dir / "free_flame_profile.csv", index=False)
     return result
 
@@ -92,7 +148,15 @@ def _fallback_profile(h2_volume_fraction: float, config: dict, status: str) -> F
     phi = equivalence_ratio_h2_o2(h2_volume_fraction)
     Tb = Tu + 1700.0 * np.clip(phi / 0.08, 0.35, 1.4)
     delta = 0.0020 / max(h2_volume_fraction / 0.10, 0.7)
-    S_L = 0.08 + 1.2 * max(h2_volume_fraction - 0.05, 0.0) ** 0.8
+    calibration = speed_calibration_from_h2(h2_volume_fraction, config)
+    if calibration is None:
+        S_L = reference_laminar_speed_h2_o2(phi, config)
+        rho_b_over_rho_u = None
+        S_b0_unstretched = None
+    else:
+        S_L = calibration["S_L_m_s"]
+        rho_b_over_rho_u = calibration["rho_b_over_rho_u"]
+        S_b0_unstretched = calibration["S_b0_unstretched_m_s"]
     x = np.linspace(0.0, float(config["free_flame"]["width_m"]), 400)
     x0 = 0.5 * x[-1]
     T = Tu + 0.5 * (Tb - Tu) * (1.0 + np.tanh((x - x0) / (0.25 * delta)))
@@ -100,4 +164,27 @@ def _fallback_profile(h2_volume_fraction: float, config: dict, status: str) -> F
     y_o2 = (1.0 - h2_volume_fraction) * 0.98 * (1.0 - 0.4 * (T - Tu) / (Tb - Tu + 1e-12))
     y_h2o = np.clip(1.0 - y_h2 - y_o2, 0.0, 1.0)
     profile = pd.DataFrame({"x_m": x, "T_K": T, "u_m_s": S_L, "Y_H2": y_h2, "Y_O2": y_o2, "Y_H2O": y_h2o})
-    return _make_result(profile, float(S_L), False, status)
+    result = _make_result(profile, float(S_L), False, status)
+    result.rho_b_over_rho_u = rho_b_over_rho_u
+    result.S_b0_unstretched_m_s = S_b0_unstretched
+    return result
+
+
+def _apply_speed_calibration(result: Flame1DResult, h2_volume_fraction: float, config: dict) -> Flame1DResult:
+    calibration = speed_calibration_from_h2(h2_volume_fraction, config)
+    if calibration is None:
+        return result
+    profile = result.profile.copy()
+    profile["u_m_s"] = float(calibration["S_L_m_s"])
+    status = f"{result.status}; S_b0_to_S_L_calibrated_for_stage1"
+    return Flame1DResult(
+        profile=profile,
+        S_L_m_s=float(calibration["S_L_m_s"]),
+        delta_f_m=result.delta_f_m,
+        T_unburned_K=result.T_unburned_K,
+        T_burned_K=result.T_burned_K,
+        used_cantera=result.used_cantera,
+        status=status,
+        rho_b_over_rho_u=float(calibration["rho_b_over_rho_u"]),
+        S_b0_unstretched_m_s=float(calibration["S_b0_unstretched_m_s"]),
+    )

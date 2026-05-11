@@ -72,6 +72,11 @@ def _load_project_yaml_subset(text: str) -> dict[str, Any]:
 
 
 def _parse_scalar(value: str) -> Any:
+    if value.startswith("[") and value.endswith("]"):
+        inner = value[1:-1].strip()
+        if not inner:
+            return []
+        return [_parse_scalar(item.strip()) for item in inner.split(",")]
     lowered = value.lower()
     if lowered in {"true", "false"}:
         return lowered == "true"

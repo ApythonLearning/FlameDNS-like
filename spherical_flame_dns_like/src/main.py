@@ -43,10 +43,14 @@ def run_case(case: dict, config: dict) -> dict:
         "delta_f_m": flame.delta_f_m,
         "T_unburned_K": flame.T_unburned_K,
         "T_burned_K": flame.T_burned_K,
+        "rho_b_over_rho_u": flame.rho_b_over_rho_u,
+        "S_b0_unstretched_input_m_s": flame.S_b0_unstretched_m_s,
         "initial_radius_m": float(config["ignition"]["initial_radius_m"]),
         "points_per_flame_thickness": ppft,
         "grid_resolution_ok": bool(ppft >= min_points),
         "S_b0_model_m_s": float(history["S_b0_model_m_s"].iloc[0]),
+        "rho_b_over_rho_u_model": float(history["rho_b_over_rho_u_model"].iloc[0]),
+        "S_L_model_m_s": float(history["S_L_model_m_s"].iloc[0]),
         "L_b_model_m": float(history["L_b_model_m"].iloc[0]),
         "Ma_model": float(history["Ma_model"].iloc[0]),
         "Markstein_number_type": "real_scalar_from_Sb_kappa_fit",
@@ -61,6 +65,23 @@ def run_case(case: dict, config: dict) -> dict:
 def run_cases(cases: list[dict], config: dict, output_dir: Path) -> pd.DataFrame:
     rows = [run_case(case, config) for case in cases]
     summary = pd.DataFrame(rows)
+    summary = add_flame_speed_trend_diagnostics(summary, config)
     output_dir.mkdir(parents=True, exist_ok=True)
     summary.to_csv(output_dir / "sweep_summary.csv", index=False)
     return summary
+
+
+def add_flame_speed_trend_diagnostics(summary: pd.DataFrame, config: dict) -> pd.DataFrame:
+    out = summary.sort_values("h2_volume_fraction").copy()
+    speeds = out["S_L_m_s"].to_numpy()
+    if len(speeds) > 1:
+        increments = pd.Series(speeds).diff().fillna(0.0).to_numpy()
+        out["S_L_increment_from_previous_m_s"] = increments
+        out["S_L_monotonic_with_h2"] = bool((increments[1:] >= -1.0e-10).all())
+    else:
+        out["S_L_increment_from_previous_m_s"] = 0.0
+        out["S_L_monotonic_with_h2"] = True
+    speed_model = config.get("free_flame", {}).get("fallback_speed_model", {})
+    out["S_L_reference_peak_phi"] = float(speed_model.get("phi_peak", 1.10))
+    out["S_L_reference_peak_note"] = "fallback model peaks near phi=1.1; current 6-14% H2/O2 cases are far lean"
+    return out
