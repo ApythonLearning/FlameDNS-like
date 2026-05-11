@@ -1,0 +1,15 @@
+cases:
+  - name: H2_06
+    h2_volume_fraction: 0.06
+  - name: H2_07
+    h2_volume_fraction: 0.07
+  - name: H2_08
+    h2_volume_fraction: 0.08
+  - name: H2_09
+    h2_volume_fraction: 0.09
+  - name: H2_10
+    h2_volume_fraction: 0.10
+  - name: H2_12
+    h2_volume_fraction: 0.12
+  - name: H2_14
+    h2_volume_fraction: 0.14

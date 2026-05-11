@@ -1,0 +1,57 @@
+project:
+  name: spherical_flame_dns_like
+  output_dir: results
+
+gas:
+  mechanism: h2o2.yaml
+  temperature_K: 298.0
+  pressure_Pa: 101325.0
+  oxidizer: O2
+  fuel: H2
+
+transport:
+  unity_lewis: true
+  cantera_transport_model: mixture-averaged
+
+gravity:
+  enabled: false
+  acceleration_m_s2: 9.80665
+
+free_flame:
+  width_m: 0.04
+  loglevel: 0
+  ratio: 3.0
+  slope: 0.06
+  curve: 0.12
+  max_time_step_count: 900
+
+mesh:
+  r_max_m: 0.020
+  z_min_m: -0.020
+  z_max_m: 0.020
+  nr: 281
+  nz: 561
+  min_points_per_flame_thickness: 10
+
+ignition:
+  initial_radius_m: 0.003
+  hot_kernel_radius_m: 0.0015
+  hot_kernel_temperature_K: 1800.0
+
+time_history:
+  synthetic_until_solver_ready: true
+  t_end_s: 0.010
+  n_steps: 501
+  cfl_limit: 0.5
+  markstein_length_factor: 1.0
+  markstein_model:
+    low_h2_volume_fraction: 0.06
+    high_h2_volume_fraction: 0.14
+    low_markstein_number: -0.20
+    high_markstein_number: 1.10
+
+postprocess:
+  flame_temperature_level: 0.5
+  fit:
+    min_radius_m: 0.004
+    max_kappa_1_s: 2000.0
