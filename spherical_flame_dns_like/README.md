@@ -48,6 +48,8 @@ profiles still provide the flame structure.
 - Fit `S_b = S_b0 - L_b kappa` for Markstein length.
 - Evaluate a linear DL/TD/RT cellular-instability diagnostic from a Law-model
   dispersion relation.
+- Integrate a weakly nonlinear cellular-amplitude model for post-linear onset
+  and saturation diagnostics.
 - Save all case data as CSV.
 - Save plots as PNG and SVG.
 
@@ -101,6 +103,24 @@ a nonlinear cellular DNS; it is a configurable stability-analysis layer used to
 identify the most amplified wavelength, cutoff wave number, and relative
 DL/TD/RT contributions.
 
+The linear dispersion layer is coupled to an optional weakly nonlinear
+Stuart-Landau amplitude model:
+
+```text
+dA / dt = omega_eff A [1 - (A / A_sat)^2]
+omega_eff = omega_linear - C S_b / R_f
+```
+
+This adds a finite-amplitude post-linear phase, onset time, saturation
+amplitude, and a simple geometric cellular-speed enhancement factor. It is
+still a reduced-order diagnostic, not a resolved nonlinear cellular DNS. It is
+intended to compare RT-Unstable, RT-neutral, and RT-Stable trends before the
+full two-dimensional reacting-flow solver is coupled to flame-front
+perturbations. The plotting script also creates a Fig. 4-style front-location
+visualization for RT-Stable, RT-neutral, and RT-Unstable conditions. Its
+`amplitude_visual_scale` only magnifies the plotted front shape; it does not
+modify the saved physical perturbation amplitude.
+
 ## Flame Thickness Definition
 
 For laminar hydrogen flames, the default flame thickness is the preheat-zone
@@ -129,7 +149,7 @@ for final studies. The older thermal-gradient thickness is still written to
 - Local flame-front curvature.
 - Upward/downward local flame speeds.
 - Flame rise velocity.
-- Nonlinear cellular instability perturbation analysis.
+- Resolved nonlinear cellular instability perturbation analysis.
 
 ## Model Scope Versus Strict DNS
 
@@ -163,6 +183,7 @@ For each case under `results/<case_name>/`:
 - `initial_field.csv`
 - `flame_history.csv`
 - `cellular_instability.csv`
+- `nonlinear_cellular.csv`
 - `flame_front_history.csv` for the representative plotted case
 - `case_summary.csv`
 
@@ -181,5 +202,13 @@ Sweep-level outputs under `results/`:
   `figures/cellular_growth_rt_modes.svg`
 - `figures/cellular_lambda_rt_modes.png`,
   `figures/cellular_lambda_rt_modes.svg`
+- `figures/nonlinear_cellular_amplitude_2x4_rt_modes.png`,
+  `figures/nonlinear_cellular_amplitude_2x4_rt_modes.svg`
+- `figures/nonlinear_cellular_onset_rt_modes.png`,
+  `figures/nonlinear_cellular_onset_rt_modes.svg`
+- `figures/nonlinear_cellular_speed_factor_rt_modes.png`,
+  `figures/nonlinear_cellular_speed_factor_rt_modes.svg`
+- `figures/nonlinear_front_locations_<case>.png`,
+  `figures/nonlinear_front_locations_<case>.svg`
 - `figures/flame_front_evolution_<case>.png`,
   `figures/flame_front_evolution_<case>.svg`

@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from .cellular_instability import build_dispersion_relation, summarize_dispersion
+from .cellular_instability import (
+    build_dispersion_relation,
+    build_nonlinear_cellular_history,
+    summarize_dispersion,
+    summarize_nonlinear_cellular,
+)
 from .chemistry import compute_free_flame, equivalence_ratio_h2_o2
 from .ignition import apply_hot_kernel, field_to_dataframe, map_profile_to_axisymmetric_mesh
 from .mesh import create_axisymmetric_mesh, points_per_flame_thickness
@@ -68,6 +73,10 @@ def run_case(case: dict, config: dict) -> dict:
     if not dispersion.empty:
         dispersion.to_csv(out_dir / "cellular_instability.csv", index=False)
     summary.update(summarize_dispersion(dispersion))
+    nonlinear = build_nonlinear_cellular_history(history, dispersion, config)
+    if not nonlinear.empty:
+        nonlinear.to_csv(out_dir / "nonlinear_cellular.csv", index=False)
+    summary.update(summarize_nonlinear_cellular(nonlinear))
     pd.DataFrame([summary]).to_csv(out_dir / "case_summary.csv", index=False)
     return summary
 

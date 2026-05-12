@@ -85,3 +85,19 @@ cellular_instability:
   k_delta_max: 1.20
   n_wavenumbers: 160
   time_sample_count: 9
+  nonlinear:
+    enabled: true
+    # Weakly nonlinear Stuart-Landau amplitude model. A/delta_f above the
+    # threshold is reported as nonlinear/cellular onset.
+    initial_amplitude_over_delta: 0.003
+    nonlinear_threshold_over_delta: 0.02
+    saturation_amplitude_over_lambda: 0.03
+    min_saturation_over_delta: 0.08
+    spherical_dilution_factor: 0.0
+    cellular_speed_gain: 0.5
+    front_visualization:
+      sample_count: 6
+      y_over_delta_max: 60.0
+      x_over_delta_shift: 18.0
+      x_over_delta_max: 205.0
+      amplitude_visual_scale: 160.0
