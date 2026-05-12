@@ -32,9 +32,12 @@ free_flame:
     S_floor_m_s: 0.0001
   speed_calibration:
     enabled: true
-    h2_volume_fraction_points: [0.06, 0.07, 0.08, 0.10, 0.12, 0.14]
-    rho_b_over_rho_u_points: [0.400, 0.339, 0.316, 0.295, 0.263, 0.237]
-    S_b0_unstretched_m_s_points: [0.15801, 0.21504, 0.56117, 0.88526, 1.17566, 1.37753]
+    h2_volume_fraction_points: [0.06, 0.07, 0.08, 0.10, 0.12, 0.14, 0.16]
+    rho_b_over_rho_u_points: [0.400, 0.339, 0.316, 0.295, 0.263, 0.237, 0.211]
+    S_b0_unstretched_m_s_points: [0.15801, 0.21504, 0.56117, 0.88526, 1.17566, 1.37753, 1.57940]
+  flame_thickness:
+    method: preheat_zone
+    inner_layer_temperature_K: 650.0
 
 mesh:
   r_max_m: 0.020
@@ -57,9 +60,9 @@ time_history:
   markstein_length_factor: 1.0
   markstein_model:
     low_h2_volume_fraction: 0.06
-    high_h2_volume_fraction: 0.14
+    high_h2_volume_fraction: 0.16
     low_markstein_number: -0.55
-    high_markstein_number: -0.10
+    high_markstein_number: 0.00
 
 postprocess:
   flame_temperature_level: 0.5
@@ -67,3 +70,18 @@ postprocess:
   fit:
     min_radius_m: 0.004
     max_kappa_1_s: 2000.0
+
+cellular_instability:
+  enabled: true
+  model: law_dl_td_rt
+  # Law-model convention: unstable -> g < 0, stable -> g > 0, neutral -> g = 0.
+  rt_mode: unstable
+  rt_modes: [unstable, neutral, stable]
+  effective_lewis:
+    fuel_lewis_number: 0.32
+    oxidizer_lewis_number: 1.15
+    zeldovich_number: 6.0
+  k_delta_min: 0.02
+  k_delta_max: 1.20
+  n_wavenumbers: 160
+  time_sample_count: 9

@@ -15,7 +15,21 @@ def main() -> None:
     cases = load_yaml(ROOT / "config" / "cases.yaml")["cases"]
     output_dir = ensure_dir(ROOT / config["project"]["output_dir"])
     summary = run_cases(cases, config, output_dir)
-    print(summary[["case", "h2_volume_fraction", "used_cantera", "S_L_m_s", "S_b0_m_s", "L_b_m", "Ma", "Pe"]])
+    columns = [
+        "case",
+        "h2_volume_fraction",
+        "used_cantera",
+        "S_L_m_s",
+        "S_b0_m_s",
+        "L_b_m",
+        "Ma",
+        "Pe",
+        "cellular_Le_eff",
+        "cellular_rt_unstable_max_growth_1_s",
+        "cellular_rt_neutral_max_growth_1_s",
+        "cellular_rt_stable_max_growth_1_s",
+    ]
+    print(summary[[column for column in columns if column in summary.columns]])
 
 
 if __name__ == "__main__":

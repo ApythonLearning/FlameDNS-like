@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from .cellular_instability import build_dispersion_relation, summarize_dispersion
 from .chemistry import compute_free_flame, equivalence_ratio_h2_o2
 from .ignition import apply_hot_kernel, field_to_dataframe, map_profile_to_axisymmetric_mesh
 from .mesh import create_axisymmetric_mesh, points_per_flame_thickness
@@ -41,6 +42,11 @@ def run_case(case: dict, config: dict) -> dict:
         "status": flame.status,
         "S_L_m_s": flame.S_L_m_s,
         "delta_f_m": flame.delta_f_m,
+        "delta_f_definition": flame.flame_thickness_method,
+        "delta_f_gradient_m": flame.delta_f_gradient_m,
+        "inner_layer_temperature_K": flame.inner_layer_temperature_K,
+        "thermal_diffusivity_T0_m2_s": flame.thermal_diffusivity_T0_m2_s,
+        "rho_unburned_kg_m3": flame.rho_unburned_kg_m3,
         "T_unburned_K": flame.T_unburned_K,
         "T_burned_K": flame.T_burned_K,
         "rho_b_over_rho_u": flame.rho_b_over_rho_u,
@@ -58,6 +64,10 @@ def run_case(case: dict, config: dict) -> dict:
         **cfl,
     }
     summary = add_dimensionless_groups(summary)
+    dispersion = build_dispersion_relation(history, summary, config)
+    if not dispersion.empty:
+        dispersion.to_csv(out_dir / "cellular_instability.csv", index=False)
+    summary.update(summarize_dispersion(dispersion))
     pd.DataFrame([summary]).to_csv(out_dir / "case_summary.csv", index=False)
     return summary
 

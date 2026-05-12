@@ -13,3 +13,5 @@ cases:
     h2_volume_fraction: 0.12
   - name: H2_14
     h2_volume_fraction: 0.14
+  - name: H2_16
+    h2_volume_fraction: 0.16
