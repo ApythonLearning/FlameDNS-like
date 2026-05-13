@@ -1,0 +1,9 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+spherical_flame_dns_like/results/*
+!spherical_flame_dns_like/results/.gitkeep
+spherical_flame_dns_like/results_axisymmetric_h2o2/
+spherical_flame_dns_like/profiles/
+spherical_flame_dns_like/postprocess_pelelmex/

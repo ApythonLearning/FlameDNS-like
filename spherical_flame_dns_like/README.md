@@ -1,30 +1,176 @@
-# Low-Mach Axisymmetric Lean H2/O2 Spherical Flame DNS-like Framework
+# Low-Mach Axisymmetric H2/O2 Spherical Flame Workflow
 
-This project is a runnable Python framework for low-Mach, two-dimensional
-axisymmetric lean hydrogen/oxygen spherical expanding flame studies.
+This project prepares and postprocesses a PeleLMeX low-Mach, two-dimensional
+axisymmetric premixed H2/O2 spherical-flame calculation.
 
-It is **DNS-like**, not a strict production DNS solver. The first implemented
-stage uses Cantera one-dimensional freely propagating premixed flames, maps the
-resulting profiles onto an axisymmetric `r-z` mesh, creates an initial spherical
-hot kernel, and runs a post-processing workflow for flame radius, burning
-velocity, stretch rate, and Markstein length. The two-dimensional reacting-flow
-solver interfaces are present as extension points.
+It does not fabricate DNS results. The Python-only synthetic expansion scripts
+are retained only for reduced-order diagnostics and are not a substitute for
+PeleLMeX plotfiles.
 
-## Quick Start
+## Dependency Check
 
-```bash
+Run:
+
+```powershell
 cd spherical_flame_dns_like
-python -m pip install -r requirements.txt
-python scripts/run_sweep.py
-python scripts/plot_results.py
+python scripts/check_dependencies.py
 ```
 
-If Cantera is unavailable or a very lean case fails to converge, the framework
-falls back to an analytic placeholder flame profile and records this in the case
-summary. This keeps the project runnable while preserving the Cantera path. The
-fallback laminar-speed model is a smooth `S_L(phi)` curve with a peak near
-`phi = 1.1`; the default 6%-16% H2/O2 cases correspond to `phi ~= 0.032-0.095`,
-so they lie on the far-lean branch where `S_L` should increase with H2 content.
+Current local check from this workspace:
+
+- Cantera: found, version 3.2.0 in the active `flame_dns` conda environment.
+- PeleLMeX executable: not found.
+- `PELE_HOME`: not set.
+- `AMREX_HOME`: not set.
+- `yt`: installed after dependency setup.
+- `h5py`: installed but currently has a Windows DLL import failure in this
+  environment; repair with conda-forge or a clean environment before requiring
+  HDF5 output.
+
+Python dependencies:
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+If `h5py` fails to import on Windows, prefer a conda-forge install in the active
+environment:
+
+```powershell
+conda install -c conda-forge h5py hdf5
+```
+
+## PeleLMeX / AMReX Install Notes
+
+PeleLMeX and AMReX are not installed in the current machine environment. A
+typical Linux or WSL setup is:
+
+```bash
+git clone --recursive https://github.com/AMReX-Combustion/PeleLMeX.git
+cd PeleLMeX
+git submodule update --init --recursive
+export PELE_HOME=$PWD
+```
+
+Install a C++ compiler, MPI, CMake, Python, and the PeleLMeX third-party
+libraries required by your target build. From a case directory:
+
+```bash
+make -j4 TPL
+make -j4
+./PeleLMeX2d.gnu.MPI.ex inputs.axisym_h2o2
+```
+
+On native Windows, WSL is the more practical path for PeleLMeX/AMReX builds.
+
+## Step 1: 1D Cantera Premixed Flame
+
+Compute the 1D freely propagating H2/O2 flame:
+
+```powershell
+python scripts/compute_1d_h2o2_flame.py --phi 0.6 --output-dir profiles/h2o2_phi_060
+```
+
+Outputs:
+
+- `h2o2_1d_summary.csv`
+- `h2o2_1d_summary.json`
+- `h2o2_1d_profile.csv`
+- `h2o2_1d_profile.h5`
+
+The summary contains `S_L_m_s`, `delta_T_m`, `Tb_K`, `rho_u_kg_m3`, and
+`rho_b_kg_m3`. The profile file stores temperature, velocity, density, mass
+fractions, and mole fractions along the 1D flame coordinate.
+
+Very lean H2/O2, for example `--h2-volume-fraction 0.10` (`phi ~= 0.0556`), may
+fail Cantera's freely propagating flame solve. The script intentionally fails in
+that case instead of substituting synthetic flame data.
+
+## Step 2: PeleLMeX Case Template
+
+The case template is in:
+
+```text
+examples/pelelmex_axisymmetric_h2o2/
+```
+
+It includes:
+
+- `GNUmakefile`
+- `inputs.axisym_h2o2`
+- `pelelmex_prob.H`
+- `pelelmex_prob.cpp`
+
+The inputs expose:
+
+- `prob.phi` or `prob.h2_volume_fraction`
+- `prob.T0`
+- `prob.P_mean`
+- `prob.ignition_radius`
+- `prob.ignition_temperature`
+- `prob.gravity_magnitude`
+- `prob.gravity_direction`
+- `prob.domain_size`
+- `prob.grid_resolution`
+- `prob.max_step`
+- `prob.cfl`
+- `prob.plot_int`
+
+`pelelmex_prob.H` initializes a spherical high-temperature kernel in the RZ
+domain. The generated 1D profiles are referenced by `prob.profile_csv` for the
+next initialization refinement step.
+
+## Step 3: Plotfile Postprocessing
+
+Postprocessing requires real PeleLMeX/AMReX plotfiles and `yt`:
+
+```powershell
+python scripts/postprocess_pelelmex_plotfiles.py plt00020 plt00040 --summary profiles/h2o2_phi_060/h2o2_1d_summary.json --output-dir postprocess_pelelmex
+```
+
+The script reads the true temperature field, extracts the
+`T = (Tu + Tb) / 2` contour, and writes:
+
+- `flame_radii.csv`
+- `flame_radii.png`
+- `flame_contours.png`
+
+It reports upper, lower, mean, and maximum flame radius. It does not create
+placeholder plotfile data.
+
+## Step 4: DNS Resolution Check
+
+Check the DNS mesh and CFL criteria with:
+
+```powershell
+python scripts/check_dns_resolution.py --summary profiles/h2o2_phi_060/h2o2_1d_summary.json --dx 1.875e-5 --cfl 0.3
+```
+
+The required criterion is:
+
+```text
+dx <= delta_T / 10
+CFL < 0.5
+```
+
+The recommended criterion is:
+
+```text
+dx <= delta_T / 20
+```
+
+## Legacy Reduced-Order Scripts
+
+The older `run_case.py`, `run_sweep.py`, and plotting scripts below are
+diagnostic prototypes. They may use analytic fallback profiles and synthetic
+expansion histories to keep the reduced-order workflow runnable. Do not treat
+their outputs as DNS or PeleLMeX results. For DNS postprocessing, use
+`postprocess_pelelmex_plotfiles.py` on real plotfiles only.
+
+The legacy fallback laminar-speed model is a smooth `S_L(phi)` curve with a
+peak near `phi = 1.1`; the default 6%-16% H2/O2 cases correspond to
+`phi ~= 0.032-0.095`, so they lie on the far-lean branch where `S_L` should
+increase with H2 content.
 For the Stage 1 expanding-flame diagnostics, `free_flame.speed_calibration`
 stores the experimental-style no-stretch intercept `S_b0` from the `S_b-kappa`
 plot and the density ratio `rho_b/rho_u`. The scalar laminar burning velocity
